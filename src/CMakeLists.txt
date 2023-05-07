@@ -52,7 +52,6 @@ else()
     add_definitions(-DENABLE_MULTITARGET_CODE=0)
 endif()
 
-
 add_subdirectory (Access)
 add_subdirectory (Backups)
 add_subdirectory (Columns)
@@ -80,7 +79,9 @@ add_subdirectory (Bridge)
 add_subdirectory (Daemon)
 add_subdirectory (Loggers)
 # kai mod
-add_subdirectory (parallelization)
+if(ENABLE_CUDA)
+    add_subdirectory (parallelization)
+endif()
 
 set(dbms_headers)
 set(dbms_sources)

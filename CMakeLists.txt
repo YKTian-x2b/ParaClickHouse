@@ -1,8 +1,23 @@
 cmake_minimum_required(VERSION 3.20)
+
+project(ClickHouse LANGUAGES C CXX ASM)     # CUDA
+
 # kai mod
-set(CMAKE_CUDA_ARCHITECTURES 86)
-set(CMAKE_CUDA_COMPILER /usr/local/cuda/bin/nvcc)
-project(ClickHouse LANGUAGES C CXX ASM CUDA)
+if(DEFINED ENABLE_CUDA)
+    unset(ENABLE_CUDA CACHE)
+endif()
+
+option(ENABLE_CUDA  "Whether CUDA parallelization is allowed"  ON)
+
+if(ENABLE_CUDA)
+    add_definitions(-D ENABLE_CUDA)
+    set(CMAKE_CUDA_ARCHITECTURES 86)
+    set(CMAKE_CUDA_COMPILER /usr/local/cuda/bin/nvcc)
+    enable_language(CUDA)
+    message(STATUS "kai ============================ ENABLE CUDA: ON =======================")
+else()
+    message(STATUS "kai ============================ ENABLE CUDA: OFF =======================")
+endif ()
 
 # If turned off: e.g. when ENABLE_FOO is ON, but FOO tool was not found, the CMake will continue.
 option(FAIL_ON_UNSUPPORTED_OPTIONS_COMBINATION
@@ -173,7 +188,7 @@ option(ENABLE_EXAMPLES "Build all example programs in 'examples' subdirectories"
 
 if (OS_LINUX AND (ARCH_AMD64 OR ARCH_AARCH64) AND USE_STATIC_LIBRARIES AND NOT SPLIT_SHARED_LIBRARIES AND NOT USE_MUSL)
     # Only for Linux, x86_64 or aarch64.
-    option(GLIBC_COMPATIBILITY "Enable compatibility with older glibc libraries." ON)
+    option(GLIBC_COMPATIBILITY "Enable compatibility with older glibc libraries." OFF)
 elseif(GLIBC_COMPATIBILITY)
     message (${RECONFIGURE_MESSAGE_LEVEL} "Glibc compatibility cannot be enabled in current configuration")
 endif ()
@@ -325,8 +340,11 @@ set (CMAKE_C_EXTENSIONS ON)
 set (CMAKE_C_STANDARD_REQUIRED ON)
 
 # kai mod
-set(CMAKE_CUDA_STANDARD 17)
-set(CMAKE_CUDA_STANDARD_REQUIRED ON)
+if(ENABLE_CUDA)
+    set(CMAKE_CUDA_STANDARD 17)
+    set(CMAKE_CUDA_EXTENSIONS ON)
+    set(CMAKE_CUDA_STANDARD_REQUIRED ON)
+endif()
 
 if (COMPILER_GCC OR COMPILER_CLANG)
     # Enable C++14 sized global deallocation functions. It should be enabled by setting -std=c++14 but I'm not sure.
@@ -390,6 +408,8 @@ set (CMAKE_C_FLAGS_DEBUG                 "${CMAKE_C_FLAGS_DEBUG} -O0 ${DEBUG_INF
 set (CMAKE_ASM_FLAGS                     "${CMAKE_ASM_FLAGS} ${COMPILER_FLAGS} ${CMAKE_ASM_FLAGS_ADD}")
 set (CMAKE_ASM_FLAGS_RELWITHDEBINFO      "${CMAKE_ASM_FLAGS_RELWITHDEBINFO} -O3 ${DEBUG_INFO_FLAGS} ${CMAKE_ASM_FLAGS_ADD}")
 set (CMAKE_ASM_FLAGS_DEBUG               "${CMAKE_ASM_FLAGS_DEBUG} -O0 ${DEBUG_INFO_FLAGS} -fno-inline ${CMAKE_ASM_FLAGS_ADD}")
+
+set (CMAKE_CXX_FLAGS                     "${CMAKE_CXX_FLAGS} -fPIC")
 
 if (COMPILER_CLANG)
     if (OS_DARWIN)

@@ -23,10 +23,12 @@ list(REMOVE_ITEM clickhouse_aggregate_functions_headers
 )
 
 add_library(clickhouse_aggregate_functions ${clickhouse_aggregate_functions_sources})
-# kai mod
+
 target_link_libraries(clickhouse_aggregate_functions PRIVATE dbms PUBLIC ch_contrib::cityhash)
-target_link_libraries(clickhouse_aggregate_functions PUBLIC clickhouse_aggregate_functions_cuda)
-target_link_libraries(clickhouse_aggregate_functions PUBLIC clickhouse_aggregate_functions_common)
+# kai mod
+if(ENABLE_CUDA)
+    target_link_libraries(clickhouse_aggregate_functions PRIVATE clickhouse_aggregate_functions_cuda)
+endif()
 
 if(ENABLE_EXAMPLES)
     add_subdirectory(examples)

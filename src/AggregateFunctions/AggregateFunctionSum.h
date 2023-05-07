@@ -21,8 +21,11 @@
 #    include <DataTypes/Native.h>
 #endif
 
+#ifdef ENABLE_CUDA
 #include "parallelization/AggregateFunctionSum_CUDA.cuh"
-#include <Common/logger_useful.h>
+#include "parallelization/ResourceManagement.h"
+#endif
+
 #include <string>
 #include <cstdlib>
 
@@ -43,6 +46,7 @@ struct AggregateFunctionSumAddOverflowImpl
         lhs += rhs;
     }
 };
+
 template <typename DecimalNativeType>
 struct AggregateFunctionSumAddOverflowImpl<Decimal<DecimalNativeType>>
 {
@@ -395,6 +399,7 @@ enum AggregateFunctionSumType
     AggregateFunctionTypeSumWithOverflow,
     AggregateFunctionTypeSumKahan,
 };
+
 /// Counts the sum of the numbers.
 template <typename T, typename TResult, typename Data, AggregateFunctionSumType Type>
 class AggregateFunctionSum final : public IAggregateFunctionDataHelper<Data, AggregateFunctionSum<T, TResult, Data, Type>>
@@ -447,34 +452,8 @@ public:
         else
             this->data(place).add(column.getData()[row_num]);
     }
-    // kai mod
-    void addCUDA(size_t row_begin,
-                 size_t row_end,
-                 AggregateDataPtr * places,
-                 size_t place_offset,
-                 const IColumn ** columns,
-                 Arena * arena,
-                 ssize_t if_argument_pos) const override
-    {
-        std::cout << "kai_____________________addCUDA in AggregateFunctionSum " << std::endl;
-        if constexpr (std::is_same_v<T, char8_t> || (!std::is_integral_v<T> && !std::is_floating_point_v<T>)){
-            std::cout << "kai_____________________addCUDA in AggregateFunctionSum if" << std::endl;
-            for (size_t i = row_begin; i < row_end; ++i)
-                if (places[i])
-                    add(places[i]+place_offset, columns, i, arena);
-        }
-        else{
-            std::cout << "kai_____________________addCUDA in AggregateFunctionSum else" << std::endl;
-            Int64 row_nums = row_end > row_begin ? row_end - row_begin : -1;
-            if(row_nums == -1){
-                throw new std::string("Function addBatchSum_cuda() args row_end <= row _begin");
-            }
 
-            const auto & column = assert_cast<const ColVecType &>(*columns[0]);
-            const char * start_row = reinterpret_cast<const char *>(&(column.getData()[row_begin]));
-            // addBatchSumCuda<T>(row_nums, places, place_offset, start_row, if_argument_pos);
-        }
-    }
+#ifdef ENABLE_CUDA
     // kai mod
     void addSinglePlaceCUDA(size_t row_begin,
                             size_t row_end,
@@ -483,28 +462,46 @@ public:
                             Arena * arena,
                             ssize_t if_argument_pos) const override
     {
-        std::cout << "kai_____________________addSinglePlaceCUDA in AggregateFunctionSum " << std::endl;
-        if constexpr (std::is_same_v<T, char8_t> || (!std::is_integral_v<T> && !std::is_floating_point_v<T>)){
-            std::cout << "kai_____________________addSinglePlaceCUDA in AggregateFunctionSum if" << std::endl;
+        if constexpr (!std::is_integral_v<T> || (!std::is_integral_v<TResult> && !std::is_floating_point_v<TResult>)){
+            // std::cout << "kai_____________________addSinglePlaceCUDA in AggregateFunctionSum if" << std::endl;
             for (size_t i = row_begin; i < row_end; ++i)
                 add(place, columns, i, arena);
         }
         else{
-            std::cout << "kai_____________________addSinglePlaceCUDA in AggregateFunctionSum else" << std::endl;
-            Int64 row_nums = row_end > row_begin ? row_end - row_begin : -1;
-            if(row_nums == -1){
-                throw new std::string("Function addBatchSum_cuda() args row_end <= row _begin");
-            }
-
+            UInt64 num_rows = row_end - row_begin;
+            assert(num_rows >= 0);
             const auto & column = assert_cast<const ColVecType &>(*columns[0]);
             const char * start_row = reinterpret_cast<const char *>(&(column.getData()[row_begin]));
 
-            T * tt = (T*)malloc(2*sizeof(T));
-            memcpy(tt, start_row, 2*sizeof(T));
-            std::cout << tt[0] << " " << tt[1] << " in AggFuncSum" << std::endl;
-            addBatchSumCuda<T>(row_nums, place, start_row, if_argument_pos);
+            auto & resourceManOnce = ResourceManagementOnce::instance();
+            size_t resourceIdx = resourceManOnce.getResourceIdx();
+
+            void * stream = resourceManOnce.getStream(resourceIdx);
+            void ** allMemPtr = resourceManOnce.getAllMemPtrs(resourceIdx);
+
+            if constexpr (std::is_same_v<T, char8_t>){
+                // std::cout << "kai_____________________addSinglePlaceCUDA in AggregateFunctionSum else if(char8_t)" << std::endl;
+                if constexpr (std::is_same_v<TResult, char8_t>){
+                    unsigned char res = 0;
+                    addBatchSumCuda<unsigned char, unsigned char>(num_rows, &res, start_row, if_argument_pos, stream, allMemPtr);
+                    this->data(place).add(res);
+                }
+                else{
+                    TResult res = 0;
+                    addBatchSumCuda<unsigned char, TResult>(num_rows, &res, start_row, if_argument_pos, stream, allMemPtr);
+                    this->data(place).add(res);
+                }
+            }
+            else{
+                // std::cout << "kai_____________________addSinglePlaceCUDA in AggregateFunctionSum else" << std::endl;
+                TResult res = 0;
+                addBatchSumCuda<T, TResult>(num_rows, &res, start_row, if_argument_pos, stream, allMemPtr);
+                this->data(place).add(res);
+            }
+            resourceManOnce.returnResourceIdx(resourceIdx);
         }
     }
+#endif
 
     void addBatchSinglePlace(
         size_t row_begin,

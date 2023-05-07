@@ -228,15 +228,6 @@ public:
         const IColumn ** columns,
         Arena * arena,
         ssize_t if_argument_pos = -1) const = 0;
-    // kai mod
-    virtual void addBatchCUDA( /// NOLINT
-        size_t row_begin,
-        size_t row_end,
-        AggregateDataPtr * places,
-        size_t place_offset,
-        const IColumn ** columns,
-        Arena * arena,
-        ssize_t if_argument_pos = -1) const = 0;
 
     /// The version of "addBatch", that handle sparse columns as arguments.
     virtual void addBatchSparse(
@@ -266,6 +257,7 @@ public:
         ssize_t if_argument_pos = -1) const = 0;
 
     // kai mod
+#ifdef ENABLE_CUDA
     virtual void addBatchSinglePlaceCUDA( /// NOLINT
         size_t row_begin,
         size_t row_end,
@@ -273,7 +265,7 @@ public:
         const IColumn ** columns,
         Arena * arena,
         ssize_t if_argument_pos = -1) const = 0;
-
+#endif
     /// The version of "addBatchSinglePlace", that handle sparse columns as arguments.
     virtual void addBatchSparseSinglePlace(
         size_t row_begin,
@@ -475,29 +467,6 @@ public:
                     static_cast<const Derived *>(this)->add(places[i] + place_offset, columns, i, arena);
         }
     }
-    // kai mod
-    virtual void addCUDA(size_t row_begin,
-                         size_t row_end,
-                         AggregateDataPtr * places,
-                         size_t place_offset,
-                         const IColumn ** columns,
-                         Arena * arena,
-                         ssize_t if_argument_pos) const
-    {
-        addBatch(row_begin, row_end, places, place_offset, columns, arena, if_argument_pos);
-    }
-    // kai mod
-    void addBatchCUDA( /// NOLINT
-        size_t row_begin,
-        size_t row_end,
-        AggregateDataPtr * places,
-        size_t place_offset,
-        const IColumn ** columns,
-        Arena * arena,
-        ssize_t if_argument_pos) const override
-    {
-        static_cast<const Derived *>(this)->addCUDA(row_begin, row_end, places, place_offset, columns, arena, if_argument_pos);
-    }
 
     void addBatchSparse(
         size_t row_begin,
@@ -552,6 +521,8 @@ public:
                 static_cast<const Derived *>(this)->add(place, columns, i, arena);
         }
     }
+
+#ifdef ENABLE_CUDA
     // kai mod
     virtual void addSinglePlaceCUDA(
         size_t row_begin,
@@ -574,6 +545,7 @@ public:
     {
         static_cast<const Derived *>(this)->addSinglePlaceCUDA(row_begin, row_end, place, columns, arena, if_argument_pos);
     }
+#endif
 
     void addBatchSparseSinglePlace(
         size_t row_begin,
